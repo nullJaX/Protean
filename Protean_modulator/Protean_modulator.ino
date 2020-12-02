@@ -2,62 +2,55 @@
 //  Protean modulator   //
 //    for ATtiny 85     //
 // Kinetik Laboratories //
-//    Pangrus 2015      //    
+//    Pangrus 2015      //
 //////////////////////////
+#define N_WAVEFORMS 10
 
-int delayTime;
-int waveform;
-int sampleholdWave = 128;
-int triangleWave = 0;
-int smoothRndOld = 127;
-int smoothRndNew = 128;
-int smoothRndOut = 128;
-int maxOutput = 255;
+byte sample = 127;
+byte sampleOld = 127;
 
 void setup() {
-  pinMode(1, OUTPUT);
-  pinMode(2, INPUT);
-  pinMode(3, INPUT);
-  TCCR0A = 2 << COM0A0 | 2 << COM0B0 | 3 << WGM00;
-  TCCR0B = 0 << WGM02 | 1 << CS00;
+    pinMode(1, OUTPUT);
+    pinMode(2, INPUT);
+    pinMode(3, INPUT);
+    TCCR0A = 2 << COM0A0 | 2 << COM0B0 | 3 << WGM00;
+    TCCR0B = 0 << WGM02 | 1 << CS00;
 }
 
 void loop() {
-  for (int x = 0; x <= 255; x++) {
-    waveform = analogRead(2);
-    if (analogRead (3) < 5) waveform = -1;
-    delayTime = map(analogRead (3), 0, 1023, 32000, 1);
-    if (waveform == -1) analogWrite(1, maxOutput);
-    if (waveform >= 0  && waveform <=  100 ) analogWrite(1, SmoothRnd());
-    if (waveform > 100  && waveform <=  280 ) analogWrite(1, Triangle(x));
-    if (waveform > 280  && waveform <= 512 ) analogWrite(1, x);
-    if (waveform > 512 && waveform <= 743 ) analogWrite(1, 255 - x);
-    if (waveform > 742 && waveform <= 923 ) analogWrite(1, Square(x));
-    if (waveform > 923 ) analogWrite(1, Samplehold(x));
-    delayMicroseconds (delayTime);
-  }
+    for (byte x = 0; x <= 255; x++) {
+        byte waveform = (byte) map_input(analogRead(2), 0, 1023, 0, N_WAVEFORMS - 1);
+        int interval = analogRead(3);
+        if (interval < 5) waveform = 255;
+        interval = map_input(interval, 0, 1023, 32000, 1);
+        analogWrite(1, waveforms(waveform, x));
+        delayMicroseconds(interval);
+    }
 }
 
-int Triangle(int x) {
-  if (x == 0) triangleWave = 0;
-  if (x > 0 and x <= 126) triangleWave = triangleWave + 2;
-  if (x > 127 and x <= 253) triangleWave = triangleWave - 2;
-  return triangleWave;
+byte waveforms(byte wave, byte x) {
+    byte output = 255;
+    if (wave == 0 && x < 128) output = 0;                                       // Square
+    else if (wave == 1) output = (x < 128) ? (x << 1) : ((255 - x) << 1) + 1;   // Triangle
+    else if (wave == 2) output -= x;                                            // Saw
+    else if (wave == 3) output = x;                                             // Reversed Saw
+    else if (wave == 4) output = 255 / (x + 1);                                 // Radiation effect
+    else if (wave == 5) {                                                       // Heart beat
+        if (x < 20) output = 234;
+        else if (x < 82 || x >= 110) output = 0;
+    } else if (wave == 6) output = (x % 2) ? (255 - x) : x;                     // Weird function
+    else if (wave == 7) {                                                       // Smooth Random
+        if (sampleOld == sample) sampleOld = random(255);
+        else if (sampleOld > sample) sample++;
+        else sample--;
+        output = sample;
+    } else if (wave == 8) {                                                     // Sample and Hold
+        if (x == sample) sample = random(255);
+        output = sample;
+    } else if (wave == 9) output = random(255);                                 // Random
+    return output;
 }
 
-int Square (int x) {
-  if (x <= 127) return maxOutput;
-  if (x > 127) return 0;
-}
-
-int Samplehold(int x) {
-  if (x == sampleholdWave) sampleholdWave = random(maxOutput);
-  return sampleholdWave;
-}
-
-int SmoothRnd() {
-  if (smoothRndOld == smoothRndNew) smoothRndOld = random(255);
-  if (smoothRndOld  > smoothRndNew) smoothRndNew++;
-  if (smoothRndOld  < smoothRndNew) smoothRndNew--;
-  return smoothRndNew;
+short map_input(short x, short in_min, short in_max, short out_min, short out_max) {
+    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
